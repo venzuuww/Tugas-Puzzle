@@ -1006,6 +1006,113 @@ function updateUI() {
   document.getElementById('progressFill').style.width = (current / 20 * 100) + '%';
 }
 
+// ===== SOUND EFFECTS =====
+function getSfxCtx() {
+  // Reuse audioCtx if available, else create a temporary one
+  if (audioCtx) return audioCtx;
+  try { return new (window.AudioContext || window.webkitAudioContext)(); } catch(e) { return null; }
+}
+
+function sfxClick() {
+  const ctx = getSfxCtx(); if (!ctx) return;
+  const o = ctx.createOscillator();
+  const g = ctx.createGain();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(880, ctx.currentTime);
+  o.frequency.exponentialRampToValueAtTime(660, ctx.currentTime + 0.08);
+  g.gain.setValueAtTime(0.18, ctx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+  o.connect(g); g.connect(ctx.destination);
+  o.start(); o.stop(ctx.currentTime + 0.13);
+}
+
+function sfxCorrect() {
+  const ctx = getSfxCtx(); if (!ctx) return;
+  // Ascending 3-note fanfare: C5 E5 G5
+  [[523.25, 0], [659.25, 0.13], [783.99, 0.26]].forEach(([freq, delay]) => {
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(freq, ctx.currentTime + delay);
+    g.gain.setValueAtTime(0, ctx.currentTime + delay);
+    g.gain.linearRampToValueAtTime(0.28, ctx.currentTime + delay + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.22);
+    o.connect(g); g.connect(ctx.destination);
+    o.start(ctx.currentTime + delay);
+    o.stop(ctx.currentTime + delay + 0.25);
+  });
+  // Sparkle hi layer
+  const o2 = ctx.createOscillator();
+  const g2 = ctx.createGain();
+  o2.type = 'sine';
+  o2.frequency.setValueAtTime(1567.98, ctx.currentTime + 0.26);
+  g2.gain.setValueAtTime(0.12, ctx.currentTime + 0.26);
+  g2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.55);
+  o2.connect(g2); g2.connect(ctx.destination);
+  o2.start(ctx.currentTime + 0.26); o2.stop(ctx.currentTime + 0.56);
+}
+
+function sfxWrong() {
+  const ctx = getSfxCtx(); if (!ctx) return;
+  // Descending "bwamp" with noise burst
+  const o = ctx.createOscillator();
+  const g = ctx.createGain();
+  o.type = 'sawtooth';
+  o.frequency.setValueAtTime(300, ctx.currentTime);
+  o.frequency.exponentialRampToValueAtTime(80, ctx.currentTime + 0.35);
+  g.gain.setValueAtTime(0.22, ctx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.38);
+  o.connect(g); g.connect(ctx.destination);
+  o.start(); o.stop(ctx.currentTime + 0.4);
+  // Short noise burst
+  const buf = ctx.createBuffer(1, ctx.sampleRate * 0.1, ctx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+  const src = ctx.createBufferSource();
+  const ng = ctx.createGain();
+  const filt = ctx.createBiquadFilter();
+  filt.type = 'lowpass'; filt.frequency.value = 400;
+  ng.gain.setValueAtTime(0.15, ctx.currentTime);
+  ng.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
+  src.buffer = buf;
+  src.connect(filt); filt.connect(ng); ng.connect(ctx.destination);
+  src.start();
+}
+
+function sfxNext() {
+  const ctx = getSfxCtx(); if (!ctx) return;
+  // Soft "whoosh" sweep
+  const o = ctx.createOscillator();
+  const g = ctx.createGain();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(400, ctx.currentTime);
+  o.frequency.linearRampToValueAtTime(700, ctx.currentTime + 0.15);
+  g.gain.setValueAtTime(0.12, ctx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18);
+  o.connect(g); g.connect(ctx.destination);
+  o.start(); o.stop(ctx.currentTime + 0.2);
+}
+
+function sfxFinish() {
+  const ctx = getSfxCtx(); if (!ctx) return;
+  // Victory fanfare: full chord run
+  const notes = [523.25, 659.25, 783.99, 1046.5, 783.99, 1046.5, 1318.5];
+  const delays = [0, 0.1, 0.2, 0.35, 0.5, 0.6, 0.72];
+  notes.forEach((freq, i) => {
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = i < 4 ? 'triangle' : 'sine';
+    o.frequency.setValueAtTime(freq, ctx.currentTime + delays[i]);
+    g.gain.setValueAtTime(0, ctx.currentTime + delays[i]);
+    g.gain.linearRampToValueAtTime(0.22, ctx.currentTime + delays[i] + 0.04);
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delays[i] + 0.35);
+    o.connect(g); g.connect(ctx.destination);
+    o.start(ctx.currentTime + delays[i]);
+    o.stop(ctx.currentTime + delays[i] + 0.38);
+  });
+}
+// =========================
+
 function showFeedback(isCorrect, explain) {
   const fb = document.getElementById('feedback');
   fb.style.display = 'flex';
@@ -1020,15 +1127,14 @@ function showFeedback(isCorrect, explain) {
   document.getElementById('nextRow').style.display = 'flex';
   answered = true;
 
-  if (isCorrect) {
-    score += 10;
-    correct++;
-    updateUI();
-  }
+  // Play sound effect
+  if (isCorrect) { sfxCorrect(); score += 10; correct++; updateUI(); }
+  else { sfxWrong(); }
 }
 
 function checkMC(idx) {
   if (answered) return;
+  sfxClick();
   const q = questions[current];
   const btns = document.querySelectorAll('.option-btn');
   btns.forEach(b => b.disabled = true);
@@ -1039,6 +1145,7 @@ function checkMC(idx) {
 
 function checkTF(val) {
   if (answered) return;
+  sfxClick();
   const q = questions[current];
   const btns = document.querySelectorAll('.tf-btn');
   btns.forEach(b => b.disabled = true);
@@ -1051,6 +1158,7 @@ function checkTF(val) {
 
 function checkFill() {
   if (answered) return;
+  sfxClick();
   const q = questions[current];
   const inp = document.getElementById('fillInput');
   const val = inp.value.trim().toLowerCase();
@@ -1061,8 +1169,10 @@ function checkFill() {
 }
 
 function nextQuestion() {
+  sfxNext();
   current++;
   if (current >= 20) {
+    setTimeout(sfxFinish, 300);
     showResult();
   } else {
     renderQuestion();
