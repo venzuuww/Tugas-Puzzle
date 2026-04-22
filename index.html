@@ -492,7 +492,51 @@
   .type-benar { background: #fff3cd; color: #856404; }
   .type-kata { background: #f8d7da; color: #721c24; }
 
-  /* ===== INTRO SCREEN ===== */
+  /* ===== MUSIC BUTTON ===== */
+  #musicBtn {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 100;
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background: var(--sun);
+    border: 3px solid var(--brown);
+    box-shadow: 4px 4px 0 var(--brown);
+    font-size: 1.4rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: musicPulse 2s ease-in-out infinite;
+  }
+  #musicBtn:hover { transform: translate(-2px,-2px); box-shadow: 6px 6px 0 var(--brown); animation: none; }
+  #musicBtn.muted { background: #ccc; animation: none; filter: grayscale(1); }
+  @keyframes musicPulse {
+    0%,100% { transform: scale(1); box-shadow: 4px 4px 0 var(--brown); }
+    50% { transform: scale(1.1); box-shadow: 5px 5px 0 var(--brown); }
+  }
+  .music-label {
+    position: fixed;
+    bottom: 78px;
+    right: 14px;
+    background: var(--brown);
+    color: white;
+    font-family: 'Baloo 2', cursive;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 10px;
+    z-index: 100;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(4px);
+    transition: all 0.3s;
+  }
+  .music-label.show { opacity: 1; transform: translateY(0); }
   #introScreen {
     position: fixed;
     inset: 0;
@@ -699,7 +743,7 @@
       🚀 Mulai Puzzle Sekarang!
     </button>
 
-    <div class="intro-footer">Tugas Koding - 22/04/2026</div>
+    <div class="intro-footer">Tugas Koding · 22/04/2026</div>
   </div>
 </div>
 
@@ -1061,10 +1105,150 @@ function startQuiz() {
   const intro = document.getElementById('introScreen');
   intro.classList.add('hide');
   setTimeout(() => { intro.style.display = 'none'; }, 600);
+  // Start music when quiz begins
+  startMusic();
+}
+
+// ===== BACKGROUND MUSIC via Web Audio API =====
+let audioCtx = null;
+let musicNodes = [];
+let musicPlaying = false;
+let musicEnabled = true;
+
+function startMusic() {
+  if (musicPlaying) return;
+  try {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    musicPlaying = true;
+    playJungleLoop();
+    showMusicLabel('🎵 Musik Aktif');
+  } catch(e) { console.log('Audio not supported'); }
+}
+
+function playJungleLoop() {
+  if (!audioCtx || !musicEnabled) return;
+
+  const master = audioCtx.createGain();
+  master.gain.setValueAtTime(0.18, audioCtx.currentTime);
+  master.connect(audioCtx.destination);
+  musicNodes.push(master);
+
+  // === Melody: cheerful pentatonic ===
+  const melody = [
+    { freq: 523.25, dur: 0.4 }, { freq: 659.25, dur: 0.4 }, { freq: 783.99, dur: 0.4 },
+    { freq: 1046.5, dur: 0.6 }, { freq: 783.99, dur: 0.4 }, { freq: 659.25, dur: 0.4 },
+    { freq: 587.33, dur: 0.4 }, { freq: 523.25, dur: 0.6 }, { freq: 440.0,  dur: 0.4 },
+    { freq: 523.25, dur: 0.4 }, { freq: 659.25, dur: 0.4 }, { freq: 783.99, dur: 0.8 },
+    { freq: 659.25, dur: 0.4 }, { freq: 587.33, dur: 0.4 }, { freq: 523.25, dur: 0.4 },
+    { freq: 440.0,  dur: 0.4 }, { freq: 392.0,  dur: 0.4 }, { freq: 440.0,  dur: 0.4 },
+    { freq: 523.25, dur: 1.2 },
+  ];
+
+  let t = audioCtx.currentTime + 0.1;
+  const totalDur = melody.reduce((s, n) => s + n.dur, 0);
+
+  melody.forEach(note => {
+    const osc = audioCtx.createOscillator();
+    const env = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(note.freq, t);
+    env.gain.setValueAtTime(0, t);
+    env.gain.linearRampToValueAtTime(0.5, t + 0.04);
+    env.gain.setValueAtTime(0.5, t + note.dur - 0.08);
+    env.gain.linearRampToValueAtTime(0, t + note.dur);
+    osc.connect(env);
+    env.connect(master);
+    osc.start(t);
+    osc.stop(t + note.dur);
+    musicNodes.push(osc, env);
+    t += note.dur;
+  });
+
+  // === Bass: simple rhythm ===
+  const bassNotes = [261.63, 196.0, 220.0, 261.63, 196.0, 220.0, 261.63, 261.63];
+  let bt = audioCtx.currentTime + 0.1;
+  const bassDur = totalDur / bassNotes.length;
+  bassNotes.forEach(freq => {
+    const osc = audioCtx.createOscillator();
+    const env = audioCtx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(freq, bt);
+    env.gain.setValueAtTime(0, bt);
+    env.gain.linearRampToValueAtTime(0.3, bt + 0.05);
+    env.gain.linearRampToValueAtTime(0, bt + bassDur * 0.7);
+    osc.connect(env);
+    env.connect(master);
+    osc.start(bt);
+    osc.stop(bt + bassDur);
+    musicNodes.push(osc, env);
+    bt += bassDur;
+  });
+
+  // === Percussion: hi-hat style ===
+  for (let i = 0; i < Math.floor(totalDur / 0.5); i++) {
+    const ht = audioCtx.currentTime + 0.1 + i * 0.5;
+    const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.08, audioCtx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let j = 0; j < data.length; j++) data[j] = (Math.random() * 2 - 1) * Math.pow(1 - j / data.length, 3);
+    const src = audioCtx.createBufferSource();
+    const filt = audioCtx.createBiquadFilter();
+    const env = audioCtx.createGain();
+    filt.type = 'highpass';
+    filt.frequency.value = 6000;
+    env.gain.setValueAtTime(0.12, ht);
+    env.gain.linearRampToValueAtTime(0, ht + 0.06);
+    src.buffer = buf;
+    src.connect(filt);
+    filt.connect(env);
+    env.connect(master);
+    src.start(ht);
+    musicNodes.push(src, filt, env);
+  }
+
+  // Loop after melody ends
+  const loopTimer = setTimeout(() => {
+    if (musicEnabled && musicPlaying) playJungleLoop();
+  }, (totalDur + 0.3) * 1000);
+  musicNodes.push({ stop: () => clearTimeout(loopTimer) });
+}
+
+function toggleMusic() {
+  const btn = document.getElementById('musicBtn');
+  if (!audioCtx) { startMusic(); return; }
+
+  musicEnabled = !musicEnabled;
+  if (!musicEnabled) {
+    // Mute: suspend context
+    audioCtx.suspend();
+    musicPlaying = false;
+    btn.textContent = '🔇';
+    btn.classList.add('muted');
+    showMusicLabel('🔇 Musik Mati');
+  } else {
+    // Unmute: resume
+    audioCtx.resume();
+    musicPlaying = false;
+    playJungleLoop();
+    musicPlaying = true;
+    btn.textContent = '🎵';
+    btn.classList.remove('muted');
+    showMusicLabel('🎵 Musik Aktif');
+  }
+}
+
+function showMusicLabel(text) {
+  const lbl = document.getElementById('musicLabel');
+  lbl.textContent = text;
+  lbl.classList.add('show');
+  setTimeout(() => lbl.classList.remove('show'), 2000);
 }
 
 // Start!
 renderQuestion();
 </script>
+<!-- Music Button -->
+<button id="musicBtn" onclick="toggleMusic()" title="Musik">🎵</button>
+<div class="music-label" id="musicLabel">Musik Aktif</div>
+
 </body>
 </html>
